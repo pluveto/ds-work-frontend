@@ -41,6 +41,7 @@
             <span v-if="edgeEdit.status === 'add'">添加</span>
             <span v-if="edgeEdit.status === 'edit'">编辑</span>
           </van-button>
+          <van-button block v-if="false" type="info" @click="submitEdges()"> 批量添加 </van-button>
         </div>
         <div class="btn-margin">
           <van-button block type="danger" v-if="edgeEdit.status === 'edit'" @click="removeEdge"> 删除 </van-button>
@@ -91,6 +92,10 @@ window.pageData = page
 export default {
   data() {
     return {
+      config: {
+        defaultNodeColor: 'black',
+        selectedNodeColor: '#3faf7e'
+      },
       cy: null,
       // 是否显示菜单（点击右上角图标）
       showMenu: false,
@@ -101,8 +106,9 @@ export default {
         { name: '清空缓存', action: 'clearCache' },
         { name: '临时存档', action: 'saveToCache' }
       ],
-      // 节点队列，用于批量创建
-      nodeQuene:[],
+      // 节点队列，用于批量创建, 使用方法是  this.nodeQuene.key = val
+      nodeQuene: {},
+      nodePair: { curId: null, prevId: null },
       // 正在编辑的标签页是什么, edge: 路径
       editorState: 'edge',
       // 路径编辑标签页
@@ -138,13 +144,29 @@ export default {
   },
   methods: {
     // 在两个节点之间添加路径
-    addEdge(sourceId, targetId) {},
+    addEdge(sourceId, targetId) {
+      page.cy.add({
+        group: 'edges',
+        data: {
+          id: snowflake(),
+          source: sourceId,
+          target: targetId
+        }
+      })
+    },
     addNode() {},
     removeEdge() {
       page.cy.getElementById(this.edgeEdit.formData.id).remove()
     },
     removeNode() {
       page.cy.getElementById(this.nodeEdit.formData.id).remove()
+    },
+    submitEdges() {
+      for (const key in this.nodeQuene) {
+        if (Object.hasOwnProperty.call(this.nodeQuene, key)) {
+          const nodeId = this.nodeQuene[key]
+        }
+      }
     },
     submitEdge() {
       switch (this.edgeEdit.status) {
@@ -156,15 +178,7 @@ export default {
           })
           break
         case 'add':
-          console.log('add edge from ', this.edgeEdit.sourceNode, 'to', this.edgeEdit.targetNode)
-          page.cy.add({
-            group: 'edges',
-            data: {
-              id: snowflake(),
-              source: this.edgeEdit.sourceNode,
-              target: this.edgeEdit.targetNode
-            }
-          })
+          this.addEdge(this.edgeEdit.sourceNode, this.edgeEdit.targetNode)
           break
         default:
           break
@@ -245,10 +259,10 @@ export default {
             css: {
               label: 'data(title)',
               'text-margin-y': '-15px',
-              'background-color': 'black',
+              'background-color': this.config.defaultNodeColor,
               'font-size': '32px',
-              height: '8px',
-              width: '8px',
+              height: '16px',
+              width: '16px',
               'border-width': '1px'
             }
           },
@@ -370,7 +384,15 @@ export default {
       })
       cy.on('tap', 'node', evt => {
         var node = evt.target
-
+        if (evt.originalEvent.shiftKey) {
+          this.nodePair.prevId = this.nodePair.curId
+          this.nodePair.curId = node.id()
+          if (this.nodePair.prevId && this.nodePair.curId) {
+            this.addEdge(this.nodePair.prevId, this.nodePair.curId)
+          }
+          //var selected = (this.nodeQuene[node.id()] = !this.nodeQuene[node.id()])
+          //node.style('background-color', selected ? this.config.selectedNodeColor : this.config.defaultNodeColor)
+        }
         if (this.editorState == 'edge') {
           switch (this.edgeEdit.modifyingType) {
             case 'source':
