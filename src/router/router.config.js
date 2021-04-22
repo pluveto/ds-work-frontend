@@ -19,11 +19,6 @@ export const constantRouterMap = [
         meta: { title: '首页', keepAlive: false }
       },
       {
-        path: '/editor',
-        name: 'Editor',
-        component: () => import('@/views/home/editor'),
-        meta: { title: '地图编辑', keepAlive: true }
-      },      {
         path: '/geditor',
         name: 'GEditor',
         component: () => import('@/views/home/geditor'),

@@ -8,9 +8,9 @@ import App from './App.vue'
 import router from './router'
 import store from './store'
 
-import {Notyf} from 'notyf'
-Vue.prototype.$toast = new Notyf({duration: 4000});
-import 'notyf/notyf.min.css'; // for React, Vue and Svelte
+import { Notyf } from 'notyf'
+Vue.prototype.$toast = new Notyf({ duration: 4000 })
+import 'notyf/notyf.min.css' // for React, Vue and Svelte
 
 import 'vue-awesome/icons'
 import Icon from 'vue-awesome/components/Icon'

@@ -29,12 +29,6 @@ export default {
         {
           title: '地图编辑',
           to: {
-            name: 'Editor'
-          },
-          icon: 'edit'
-        },  {
-          title: '地图编辑',
-          to: {
             name: 'GEditor'
           },
           icon: 'edit'

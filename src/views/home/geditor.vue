@@ -25,6 +25,7 @@
             :value="edgeEdit.formData.target.x + ',' + edgeEdit.formData.target.y"
             readonly
           />
+          <van-field label="自定义值" v-model="edgeEdit.formData.level" />
 
           <van-field name="radio" label="修改目标：">
             <template #input>
@@ -125,7 +126,8 @@ export default {
         formData: {
           id: null,
           source: { x: 0, y: 0 },
-          target: { x: 0, y: 0 }
+          target: { x: 0, y: 0 },
+          level: 0
         }
       },
       nodeEdit: {
@@ -144,13 +146,14 @@ export default {
   },
   methods: {
     // 在两个节点之间添加路径
-    addEdge(sourceId, targetId) {
+    addEdge(sourceId, targetId, level = '0') {
       page.cy.add({
         group: 'edges',
         data: {
           id: snowflake(),
           source: sourceId,
-          target: targetId
+          target: targetId,
+          level: level
         }
       })
     },
@@ -176,9 +179,10 @@ export default {
             source: this.edgeEdit.sourceNode,
             target: this.edgeEdit.targetNode
           })
+          edge.data('level', this.edgeEdit.formData.level)
           break
         case 'add':
-          this.addEdge(this.edgeEdit.sourceNode, this.edgeEdit.targetNode)
+          this.addEdge(this.edgeEdit.sourceNode, this.edgeEdit.targetNode, this.edgeEdit.formData.level)
           break
         default:
           break
@@ -269,8 +273,16 @@ export default {
           {
             selector: 'edge',
             css: {
-              'line-color': '#ac1b69',
-              opacity: '0.5'
+              'line-color': ele => {
+                var level = parseInt(ele.data('level'));
+                if (level > 0) {
+                  return '#fc5531'
+                } else {
+                  return '#ac1b69'
+                }
+              },
+              width: 5,
+              opacity: '1.0'
             }
           }
         ],
@@ -384,9 +396,9 @@ export default {
       })
       cy.on('tap', 'node', evt => {
         var node = evt.target
+        this.nodePair.prevId = this.nodePair.curId
+        this.nodePair.curId = node.id()
         if (evt.originalEvent.shiftKey) {
-          this.nodePair.prevId = this.nodePair.curId
-          this.nodePair.curId = node.id()
           if (this.nodePair.prevId && this.nodePair.curId) {
             this.addEdge(this.nodePair.prevId, this.nodePair.curId)
           }
@@ -438,6 +450,7 @@ export default {
         if (this.editorState == 'edge') {
           this.edgeEdit.status = 'edit'
           this.edgeEdit.formData.id = edge.id()
+          this.edgeEdit.formData.level = edge.data('level')
           this.edgeEdit.sourceNode = edge.source().id()
           this.edgeEdit.targetNode = edge.target().id()
         }
