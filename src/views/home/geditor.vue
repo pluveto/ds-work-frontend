@@ -7,7 +7,7 @@
     </van-nav-bar>
     <van-action-sheet v-model="showMenu" :actions="menuActions" @select="onSelect" />
 
-    <div id="cy"></div>
+    <div id="cy" tabindex="0"></div>
     <van-tabs v-model="editorState">
       <van-tab title="路径" name="edge">
         <van-cell-group>
@@ -25,16 +25,21 @@
             :value="edgeEdit.formData.target.x + ',' + edgeEdit.formData.target.y"
             readonly
           />
-          <van-field label="自定义值" v-model="edgeEdit.formData.level" />
+          <van-field label="道路级别" v-model="edgeEdit.formData.level" />
+          <van-field name="switch" label="虚拟道路">
+            <template #input>
+              <van-switch v-model="edgeEdit.formData.virtual" active-value="1" inactive-value="0" size="20" />
+            </template>
+          </van-field>
 
-          <van-field name="radio" label="修改目标：">
+          <!-- <van-field name="radio" label="修改目标：">
             <template #input>
               <van-radio-group v-model="edgeEdit.modifyingType" direction="horizontal">
                 <van-radio name="source">起点</van-radio>
                 <van-radio name="target">终点</van-radio>
               </van-radio-group>
             </template>
-          </van-field>
+          </van-field> -->
         </van-cell-group>
 
         <div class="btn-margin">
@@ -76,7 +81,11 @@ var cytoscape = require('cytoscape')
 var cyCanvas = require('cytoscape-canvas')
 
 // 用于生成递增 id
-import { snowflake } from '../../utils/snowflake'
+//import { genId } from '../../utils/genId'
+var i = +new Date()
+function genId() {
+  return ++i
+}
 
 // 实现导出 json 到浏览器，下载到本地的功能
 import { download, load } from '../../utils/file'
@@ -89,10 +98,11 @@ var page = {
   // 不要用 data 存放，否则页面会卡死
   cy: null
 }
-window.pageData = page
+
 export default {
   data() {
     return {
+      activeTab: 1,
       config: {
         defaultNodeColor: 'black',
         selectedNodeColor: '#3faf7e'
@@ -117,7 +127,7 @@ export default {
         status: 'add',
         // 这是绑定到单选的模型
         // 表示下一个点作为起点还是终点，unknown: 未知，source: 起点，target 终点
-        modifyingType: 'unknown',
+        //modifyingType: 'unknown',
         // 起点的 id
         sourceNode: null,
         // 终点的 id
@@ -127,13 +137,13 @@ export default {
           id: null,
           source: { x: 0, y: 0 },
           target: { x: 0, y: 0 },
-          level: 0
+          level: '0',
+          virtual: '0'
         }
       },
       nodeEdit: {
         // 节点只能编辑，因为通过 ctrl + 点击进行添加。
         status: 'edit',
-        modifyingType: 'unknown',
         selectedNode: null,
         formData: {
           id: null,
@@ -141,28 +151,46 @@ export default {
           subtitle: null,
           position: { x: 0, y: 0 }
         }
-      }
+      },
+      lastSelectedType: null
     }
   },
   methods: {
     // 在两个节点之间添加路径
-    addEdge(sourceId, targetId, level = '0') {
+    addEdge(sourceId, targetId, level = null) {
+      if (level == null) {
+        level = this.edgeEdit.formData.level
+        console.log('null, use form')
+      }
       page.cy.add({
         group: 'edges',
         data: {
-          id: snowflake(),
+          id: genId(),
           source: sourceId,
           target: targetId,
-          level: level
+          level: level,
+          virtual: '0'
         }
       })
     },
     addNode() {},
+    // 当按下 Delete 发生
+    deleteSelected() {
+      console.log('press delete')
+      if (this.lastSelectedType == 'edge') {
+        this.removeEdge()
+      }
+      if (this.lastSelectedType == 'node') {
+        this.removeNode()
+      }
+    },
     removeEdge() {
       page.cy.getElementById(this.edgeEdit.formData.id).remove()
+      console.log('removeEdge')
     },
     removeNode() {
       page.cy.getElementById(this.nodeEdit.formData.id).remove()
+      console.log('removeNode')
     },
     submitEdges() {
       for (const key in this.nodeQuene) {
@@ -180,6 +208,8 @@ export default {
             target: this.edgeEdit.targetNode
           })
           edge.data('level', this.edgeEdit.formData.level)
+          edge.data('virtual', this.edgeEdit.formData.virtual)
+          console.log('success to edit edge')
           break
         case 'add':
           this.addEdge(this.edgeEdit.sourceNode, this.edgeEdit.targetNode, this.edgeEdit.formData.level)
@@ -222,7 +252,55 @@ export default {
 
           break
         case 'export':
-          download('data.json', JSON.stringify(page.cy.json()))
+          var j = JSON.parse(JSON.stringify(page.cy.json()))
+          // 删掉那些乱七八糟的数据，规整一下
+          var filterJ = function (j) {
+            delete j['style']
+            delete j['data']
+            delete j['zoomingEnabled']
+            delete j['userZoomingEnabled']
+            delete j['zoom']
+            delete j['minZoom']
+            delete j['maxZoom']
+            delete j['panningEnabled']
+            delete j['userPanningEnabled']
+            delete j['pan']
+            delete j['boxSelectionEnabled']
+            delete j['renderer']
+            delete j['wheelSensitivity']
+
+            for (let index = 0; index < j.elements.nodes.length; index++) {
+              const element = j.elements.nodes[index]
+              /*  delete element['group']
+              delete element['removed']
+              delete element['selected']
+              delete element['selectable']
+              delete element['locked']
+              delete element['grabbable']
+              delete element['pannable']
+              delete element['classes'] */
+              element['data']['id'] = parseInt(element['data']['id'])
+            }
+            for (let index = 0; index < j.elements.edges.length; index++) {
+              const element = j.elements.edges[index]
+              /*       delete element['group']
+              delete element['removed']
+              delete element['selected']
+              delete element['selectable']
+              delete element['locked']
+              delete element['grabbable']
+              delete element['pannable']
+              delete element['classes']*/
+              delete element['position'] 
+              element['data']['id'] = parseInt(element['data']['id'])
+              element['data']['source'] = parseInt(element['data']['source'])
+              element['data']['target'] = parseInt(element['data']['target'])
+              element['data']['virtual'] = parseInt(element['data']['virtual'] || 0)
+              element['data']['level'] = parseInt(element['data']['level'] || 0)
+            }
+            return j
+          }
+          download('map.json', JSON.stringify(filterJ(j)))
           page.vue.$toast.success('导出成功。')
 
           break
@@ -251,6 +329,24 @@ export default {
     }
   },
   mounted() {
+    document.addEventListener('keyup', evt => {
+      console.log('event keyup', evt.code)
+      // shift+delete key 删除
+
+      if (evt.code == 'Delete') {
+        this.deleteSelected()
+      }
+      // 按下 】 设置为虚拟道路
+      if (evt.code == 'BracketRight') {
+        this.edgeEdit.formData.virtual = '1'
+        this.submitEdge()
+      }
+      // 按下 【 设置为自行车道路
+      if (evt.code == 'BracketLeft') {
+        this.edgeEdit.formData.level = '1'
+        this.submitEdge()
+      }
+    })
     page.vue = this
     const background = new Image()
     background.onload = () => {
@@ -264,9 +360,9 @@ export default {
               label: 'data(title)',
               'text-margin-y': '-15px',
               'background-color': this.config.defaultNodeColor,
-              'font-size': '32px',
-              height: '16px',
-              width: '16px',
+              'font-size': '10px',
+              height: '3px',
+              width: '3px',
               'border-width': '1px'
             }
           },
@@ -274,14 +370,18 @@ export default {
             selector: 'edge',
             css: {
               'line-color': ele => {
-                var level = parseInt(ele.data('level'));
+                var level = parseInt(ele.data('level'))
+                var virtual = parseInt(ele.data('virtual'))
+                if (virtual > 0) {
+                  return '#5fde55'
+                }
                 if (level > 0) {
                   return '#fc5531'
                 } else {
                   return '#ac1b69'
                 }
               },
-              width: 5,
+              width: 2,
               opacity: '1.0'
             }
           }
@@ -302,8 +402,8 @@ export default {
       const ctx = canvas.getContext('2d')
       cy.animate(
         {
-          pan: { x: -472.5, y: -1080.5 },
-          zoom: 0.5
+          pan: { x: 0, y: 0 },
+          zoom: 1
         },
         {
           duration: 1000
@@ -323,16 +423,16 @@ export default {
         ctx.fillStyle = 'black'
         ctx.fillText('This text follows the model', 200, 300)
 
-        // Draw shadows under nodes
-        ctx.shadowColor = 'black'
-        ctx.shadowBlur = 25 * cy.zoom()
-        ctx.fillStyle = 'white'
-        cy.nodes().forEach(node => {
-          const pos = node.position()
-          ctx.beginPath()
-          ctx.arc(pos.x, pos.y, 10, 0, 2 * Math.PI, false)
-          ctx.fill()
-        })
+        // // Draw shadows under nodes
+        // ctx.shadowColor = 'black'
+        // ctx.shadowBlur = 25 * cy.zoom()
+        // ctx.fillStyle = 'white'
+        // cy.nodes().forEach(node => {
+        //   const pos = node.position()
+        //   ctx.beginPath()
+        //   ctx.arc(pos.x, pos.y, 10, 0, 2 * Math.PI, false)
+        //   ctx.fill()
+        // })
         ctx.restore()
 
         // Draw text that is fixed in the canvas
@@ -348,27 +448,43 @@ export default {
       if (cacheData) {
         cy.add(JSON.parse(cacheData).elements)
       }
-
+      var lasttap = 0
       cy.on('tap', evt => {
         var node = evt.target
-        // 按住 Ctrl 键添加节点
+        // 如果按住 Ctrl，则键添加节点
         if (evt.originalEvent.ctrlKey) {
           console.log('add node')
           cy.add({
             group: 'nodes',
-            data: { id: snowflake(), name: '' },
+            data: { id: genId(), title: '', subtitle: '' },
             position: { x: parseInt(evt.position.x), y: parseInt(evt.position.y) }
           })
           console.log('node created')
           return
         }
+        // 如果点击了背景，双击增加节点
         if (evt.target.constructor.name === 'Core') {
+          // 停止连续连边
+          this.nodePair.prevId = null
+          // 停止删除
+          this.lastSelectedType = null
+          var deltaTime = +new Date() - lasttap
+          lasttap = +new Date()
+          if (deltaTime < 250) {
+            console.log('double click!')
+            console.log('add node')
+            cy.add({
+              group: 'nodes',
+              data: { id: genId(), name: '' },
+              position: { x: parseInt(evt.position.x), y: parseInt(evt.position.y) }
+            })
+            console.log('node created')
+          }
           console.log('click on background')
           Object.assign(this.edgeEdit, {
             status: 'add',
             // 这是绑定到单选的模型
             // 表示下一个点作为起点还是终点，unknown: 未知，source: 起点，target 终点
-            modifyingType: 'unknown',
             // 起点的 id
             sourceNode: null,
             // 终点的 id
@@ -383,7 +499,6 @@ export default {
           Object.assign(this.nodeEdit, {
             // 节点只能编辑，因为通过 ctrl + 点击进行添加。
             status: 'edit',
-            modifyingType: 'unknown',
             selectedNode: null,
             formData: {
               id: null,
@@ -394,19 +509,25 @@ export default {
           })
         }
       })
+      // 如果点击了节点
       cy.on('tap', 'node', evt => {
         var node = evt.target
         this.nodePair.prevId = this.nodePair.curId
         this.nodePair.curId = node.id()
+        // 按住 Shift 按键进行连续连线
         if (evt.originalEvent.shiftKey) {
           if (this.nodePair.prevId && this.nodePair.curId) {
             this.addEdge(this.nodePair.prevId, this.nodePair.curId)
           }
           //var selected = (this.nodeQuene[node.id()] = !this.nodeQuene[node.id()])
           //node.style('background-color', selected ? this.config.selectedNodeColor : this.config.defaultNodeColor)
+          return
         }
+        this.lastSelectedType = 'node'
+        this.editorState = 'node'
+
         if (this.editorState == 'edge') {
-          switch (this.edgeEdit.modifyingType) {
+          /* switch (this.edgeEdit.modifyingType) {
             case 'source':
               if (this.edgeEdit.targetNode == node.id()) {
                 page.vue.$toast.error('起点不能和终点相同！')
@@ -430,7 +551,7 @@ export default {
               break
             default:
               break
-          }
+          } */
         }
 
         if (this.editorState == 'node') {
@@ -445,12 +566,24 @@ export default {
           return
         }
       })
+      // 如果点击了边
       cy.on('tap', 'edge', evt => {
+        this.editorState = 'edge'
+        this.lastSelectedType = 'edge'
         var edge = evt.target
         if (this.editorState == 'edge') {
+          var level = parseInt(edge.data('level'))
+          if (!level) {
+            level = 0
+          }
+          var virtual = parseInt(edge.data('virtual'))
+          if (!virtual) {
+            virtual = 0
+          }
           this.edgeEdit.status = 'edit'
           this.edgeEdit.formData.id = edge.id()
-          this.edgeEdit.formData.level = edge.data('level')
+          this.edgeEdit.formData.level = level.toString()
+          this.edgeEdit.formData.virtual = virtual.toString()
           this.edgeEdit.sourceNode = edge.source().id()
           this.edgeEdit.targetNode = edge.target().id()
         }
@@ -458,9 +591,20 @@ export default {
 
       console.log(page.cy.json())
     }
-
+    var imgs = {
+      b2f1: 'https://z3.ax1x.com/2021/05/26/2pjudA.png',
+      b2f2: 'https://z3.ax1x.com/2021/05/26/2pjQit.png',
+      b1f1: 'https://z3.ax1x.com/2021/05/26/2pjeqH.png',
+      b1f2: 'https://z3.ax1x.com/2021/05/26/2pjnZd.png',
+      b1f3: 'https://z3.ax1x.com/2021/05/26/2pjKII.png'
+    }
+    var bgsrc = localStorage.getItem('bgsrc')
+    if (!bgsrc) {
+      bgsrc = 'https://z3.ax1x.com/2021/05/24/gvsj9e.png'
+    }
+    console.log('底图：', bgsrc)
     // Preload images
-    background.src = 'https://cdn.jsdelivr.net/gh/pluveto/0images/picgo123.png'
+    background.src = bgsrc //'https://z3.ax1x.com/2021/05/24/gxub4O.png'
   }
 }
 </script>
